@@ -46,6 +46,7 @@ class Key(str, Enum):
     PAGE_DOWN = "page_down"
     VOLUME_UP = "volume_up"
     VOLUME_DOWN = "volume_down"
+    MUTE = "mute"
     EPG = "epg"
     TXT = "txt"
     SUB = "sub"
@@ -70,7 +71,7 @@ _D = {
     Key.DIGIT_4: 16, Key.DIGIT_5: 17, Key.DIGIT_6: 18, Key.DIGIT_7: 19,
     Key.DIGIT_8: 20, Key.DIGIT_9: 21,
     Key.RECALL: 29, Key.TV_RADIO: 22, Key.PAGE_UP: 37, Key.PAGE_DOWN: 38,
-    Key.VOLUME_DOWN: 36, Key.VOLUME_UP: 35, Key.EPG: 32, Key.TXT: 34,
+    Key.VOLUME_DOWN: 36, Key.VOLUME_UP: 35, Key.MUTE: 23, Key.EPG: 32, Key.TXT: 34,
     Key.SUB: 31, Key.USB: 43, Key.RECORD: 58, Key.PLAY: 61, Key.STOP: 62,
     Key.PAUSE: 63, Key.PREVIOUS: 64, Key.NEXT: 65,
     Key.REWIND: 59, Key.FAST_FORWARD: 60,
@@ -84,7 +85,7 @@ _P30 = {
     Key.DIGIT_4: 4, Key.DIGIT_5: 5, Key.DIGIT_6: 6, Key.DIGIT_7: 7,
     Key.DIGIT_8: 8, Key.DIGIT_9: 9,
     Key.RECALL: 58, Key.TV_RADIO: 11, Key.PAGE_UP: 34, Key.PAGE_DOWN: 35,
-    Key.VOLUME_DOWN: 57, Key.VOLUME_UP: 56, Key.EPG: 29, Key.TXT: 30,
+    Key.VOLUME_DOWN: 57, Key.VOLUME_UP: 56, Key.MUTE: 12, Key.EPG: 29, Key.TXT: 30,
     Key.SUB: 28, Key.USB: 46, Key.RECORD: 43, Key.PLAY: 38, Key.STOP: 39,
     Key.PAUSE: 42, Key.PREVIOUS: 40, Key.NEXT: 41,
     Key.REWIND: 36, Key.FAST_FORWARD: 37,

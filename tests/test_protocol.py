@@ -66,6 +66,10 @@ class KeyTableTests(unittest.TestCase):
         self.assertEqual(const.keymap_for(96)[const.Key.OK], 5)
         self.assertEqual(const.keymap_for(30)[const.Key.OK], 27)
 
+    def test_mute_codes(self):
+        self.assertEqual(const.keymap_for(96)[const.Key.MUTE], 23)
+        self.assertEqual(const.keymap_for(30)[const.Key.MUTE], 12)
+
     def test_every_key_has_a_default_code(self):
         self.assertEqual(set(const.keymap_for(96)), set(const.Key))
 
