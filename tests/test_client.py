@@ -24,7 +24,7 @@ class ConnectTests(unittest.IsolatedAsyncioTestCase):
         async with FakeBox(full=True) as box:
             c = client.GMScreenClient("127.0.0.1", box.port)
             with self.assertRaises(client.BoxFullError):
-                await c.connect()
+                await c.connect(full_retries=0)
 
 
 class KeyTests(unittest.IsolatedAsyncioTestCase):
@@ -48,6 +48,31 @@ class KeyTests(unittest.IsolatedAsyncioTestCase):
                 await c.send_key("menu")
                 await asyncio.sleep(0.05)
         self.assertIn('<KeyValue>6</KeyValue>', box.received[0])
+
+    async def test_full_box_is_retried_before_giving_up(self):
+        async with FakeBox(full=True) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            with self.assertRaises(client.BoxFullError):
+                await c.connect(full_retries=2, full_delay=0.01)
+        self.assertEqual(box.connections, 3)
+
+    async def test_allow_full_proceeds_anyway(self):
+        async with FakeBox(full=True) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            info = await c.connect(allow_full=True)
+            self.assertTrue(info.full)
+            await c.close()
+
+
+class IdentityTests(unittest.TestCase):
+    def test_default_uuid_is_stable_per_host_and_name(self):
+        a = client.GMScreenClient("192.168.1.5").client_uuid
+        self.assertEqual(a, client.GMScreenClient("192.168.1.5").client_uuid)
+        self.assertNotEqual(a, client.GMScreenClient("192.168.1.6").client_uuid)
+        self.assertNotEqual(a, client.GMScreenClient("192.168.1.5", device_name="x").client_uuid)
+
+    def test_explicit_uuid_wins(self):
+        self.assertEqual(client.GMScreenClient("h", client_uuid="fixed").client_uuid, "fixed")
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):

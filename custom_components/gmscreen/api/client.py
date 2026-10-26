@@ -20,10 +20,13 @@ class BoxFullError(GMScreenError):
 class GMScreenClient:
     def __init__(self, host: str, port: int = DEFAULT_PORT, *,
                  client_uuid: str | None = None, device_name: str = "HomeAssistant",
-                 timeout: float = 4.0) -> None:
+                 timeout: float = 10.0) -> None:
         self.host = host
         self.port = port
-        self.client_uuid = client_uuid or str(uuid.uuid4())
+        # The box appears to keep one slot per client UUID, so it must be stable across
+        # runs.  Default: a fixed UUID derived from name and host.
+        self.client_uuid = client_uuid or str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"gmscreen:{device_name}:{host}"))
         self.device_name = device_name
         self.timeout = timeout
         self.info: BoxInfo | None = None
@@ -37,24 +40,32 @@ class GMScreenClient:
         return self._writer is not None and not self._writer.is_closing() \
             and self._drain_task is not None and not self._drain_task.done()
 
-    async def connect(self) -> BoxInfo:
+    async def connect(self, *, allow_full: bool = False, full_retries: int = 4,
+                      full_delay: float = 3.0) -> BoxInfo:
+        """Open a session.  If the box reports it is full, wait and retry; with
+        allow_full=True proceed anyway."""
         await self.close()
-        try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port), self.timeout)
-            self._writer.write(handshake_request(self.device_name, self.client_uuid))
-            await self._writer.drain()
-            raw = await asyncio.wait_for(self._reader.readexactly(BEACON_SIZE), self.timeout)
-            info = parse_beacon(raw, self.host)
-        except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, ProtocolError) as err:
-            await self.close()
-            raise GMScreenError(f"handshake with {self.host}:{self.port} failed: {err!r}") from err
-        if info.full:
-            await self.close()
-            raise BoxFullError("box reports it is full")
-        self.info = info
-        self._drain_task = asyncio.create_task(self._drain())
-        return info
+        for attempt in range(full_retries + 1):
+            try:
+                self._reader, self._writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.host, self.port), self.timeout)
+                self._writer.write(handshake_request(self.device_name, self.client_uuid))
+                await self._writer.drain()
+                raw = await asyncio.wait_for(self._reader.readexactly(BEACON_SIZE), self.timeout)
+                info = parse_beacon(raw, self.host)
+            except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, ProtocolError) as err:
+                await self.close()
+                raise GMScreenError(f"handshake with {self.host}:{self.port} failed: {err!r}") from err
+            if info.full and not allow_full:
+                await self.close()
+                if attempt < full_retries:
+                    await asyncio.sleep(full_delay)
+                    continue
+                raise BoxFullError("box reports it is full")
+            self.info = info
+            self._drain_task = asyncio.create_task(self._drain())
+            return info
+        raise BoxFullError("box reports it is full")
 
     async def _drain(self) -> None:
         """Discard whatever the box pushes so buffers never fill; ends on disconnect."""
