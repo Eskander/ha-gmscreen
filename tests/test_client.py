@@ -50,5 +50,30 @@ class KeyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('<KeyValue>6</KeyValue>', box.received[0])
 
 
+class SessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reconnects_after_the_box_drops_an_idle_session(self):
+        async with FakeBox() as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            await c.send_key(const.Key.OK)
+            await asyncio.sleep(0.05)                # let the box read the press first
+            box.drop_clients()                       # what the box does after ~25 s idle
+            await asyncio.sleep(0.1)
+            self.assertFalse(c.connected)
+            await c.send_key(const.Key.OK)
+            await asyncio.sleep(0.05)
+            await c.close()
+        self.assertEqual(box.connections, 2)
+        self.assertEqual(len(box.received), 2)
+
+    async def test_simultaneous_presses_share_one_session(self):
+        async with FakeBox() as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            await asyncio.gather(*(c.send_key(const.Key.OK) for _ in range(5)))
+            await asyncio.sleep(0.05)
+            await c.close()
+        self.assertEqual(box.connections, 1)
+        self.assertEqual(len(box.received), 5)
+
+
 if __name__ == "__main__":
     unittest.main()

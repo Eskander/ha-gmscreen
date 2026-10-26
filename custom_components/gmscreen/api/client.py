@@ -30,6 +30,7 @@ class GMScreenClient:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._drain_task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()
 
     @property
     def connected(self) -> bool:
@@ -72,26 +73,39 @@ class GMScreenClient:
                 await self._writer.wait_closed()
         self._reader = self._writer = None
 
+    async def _send(self, resolve) -> None:
+        """Send one key press.  Connect, resolve and write happen under one lock so
+        concurrent callers never open two sessions.  The box drops idle clients after
+        roughly 25 s, so a stale session is replaced and the press retried once."""
+        for attempt in (1, 2):
+            async with self._lock:
+                try:
+                    if not self.connected:
+                        await self.connect()
+                    assert self.info and self._writer
+                    code = resolve(self.info)
+                    self._writer.write(key_request(code, self.info.data_type))
+                    await asyncio.wait_for(self._writer.drain(), self.timeout)
+                    return
+                except (OSError, asyncio.TimeoutError) as err:
+                    await self.close()
+                    if attempt == 2:
+                        raise GMScreenError(f"send failed: {err!r}") from err
+
     async def send_code(self, code: int) -> None:
-        if not self.connected:
-            await self.connect()
-        assert self.info and self._writer
-        try:
-            self._writer.write(key_request(code, self.info.data_type))
-            await asyncio.wait_for(self._writer.drain(), self.timeout)
-        except (OSError, asyncio.TimeoutError) as err:
-            await self.close()
-            raise GMScreenError(f"send failed: {err!r}") from err
+        """Send a raw key code."""
+        await self._send(lambda info: code)
 
     async def send_key(self, key: Key | str) -> None:
-        if not self.connected:
-            await self.connect()
-        assert self.info
         key = Key(key)
-        table = keymap_for(self.info.platform_id)
-        if key not in table:
-            raise GMScreenError(f"{key.value} is not available on platform {self.info.platform_id}")
-        await self.send_code(table[key])
+
+        def resolve(info: BoxInfo) -> int:
+            table = keymap_for(info.platform_id)
+            if key not in table:
+                raise GMScreenError(f"{key.value} is not available on platform {info.platform_id}")
+            return table[key]
+
+        await self._send(resolve)
 
     async def __aenter__(self) -> "GMScreenClient":
         await self.connect()
