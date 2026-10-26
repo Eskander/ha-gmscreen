@@ -3,7 +3,7 @@ import json
 import unittest
 
 import _api  # noqa: F401
-from fake_box import FakeBox
+from fake_box import FakeBox, gcdh
 from gmscreen_api import client, const
 
 
@@ -98,6 +98,40 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             await c.close()
         self.assertEqual(box.connections, 1)
         self.assertEqual(len(box.received), 5)
+
+
+class QueryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reply_is_matched_by_its_header_id(self):
+        # a stale frame for another request, a bare acknowledgement, then the answer
+        replies = {15: gcdh(999, [{"stale": 1}]) + gcdh(15, None) + gcdh(15, [{"StbStatus": 1}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            self.assertEqual(await c.request(15), [{"StbStatus": 1}])
+            await c.close()
+
+    async def test_concurrent_queries_each_get_their_own_answer(self):
+        replies = {15: gcdh(15, [{"StbStatus": 0}]), 19: gcdh(19, [{"Data": "1"}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            a, b = await asyncio.gather(c.request(19), c.request(15))
+            await c.close()
+        self.assertEqual((a, b), ([{"Data": "1"}], [{"StbStatus": 0}]))
+        self.assertEqual(box.connections, 1)
+
+    async def test_unanswered_query_raises_and_resets_the_session(self):
+        async with FakeBox() as box:              # answers nothing
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            with self.assertRaises(client.GMScreenError):
+                await c.request(15, timeout=0.2)
+            self.assertFalse(c.connected)
+        self.assertEqual(box.connections, 2)       # one retry on a fresh session
+
+    async def test_late_reply_for_an_earlier_request_is_ignored(self):
+        replies = {19: gcdh(15, [{"late": 1}]) + gcdh(19, [{"Data": "0"}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            self.assertEqual(await c.request(19), [{"Data": "0"}])
+            await c.close()
 
 
 if __name__ == "__main__":

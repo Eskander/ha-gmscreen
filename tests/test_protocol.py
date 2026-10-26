@@ -1,7 +1,7 @@
 import unittest
 
 import _api  # noqa: F401
-from fake_box import make_beacon
+from fake_box import gcdh, make_beacon
 from gmscreen_api import const, protocol
 
 
@@ -72,6 +72,32 @@ class KeyTableTests(unittest.TestCase):
 
     def test_every_key_has_a_default_code(self):
         self.assertEqual(set(const.keymap_for(96)), set(const.Key))
+
+
+class ReplyTests(unittest.TestCase):
+    def test_request_body_json_and_xml(self):
+        self.assertTrue(protocol.request_body(15, const.DATA_JSON).endswith(b'{"request":"15"}'))
+        self.assertTrue(protocol.request_body(15, const.DATA_XML).endswith(b'<Command request="15"/>'))
+
+    def test_split_keeps_an_incomplete_frame_for_later(self):
+        frames, rest = protocol.split_replies(gcdh(5, [{"x": 1}]) + gcdh(6, [{"y": 2}])[:20])
+        self.assertEqual([rid for rid, _ in frames], [5])
+        self.assertEqual(len(rest), 20)
+
+    def test_split_skips_garbage_before_a_header(self):
+        frames, rest = protocol.split_replies(b"junk, junk, junk" + gcdh(7, [{"z": 3}]))
+        self.assertEqual([rid for rid, _ in frames], [7])
+        self.assertEqual(rest, b"")
+
+    def test_decode_body(self):
+        _, body = protocol.split_replies(gcdh(1, [{"a": 1}]))[0][0]
+        self.assertEqual(protocol.decode_body(body), [{"a": 1}])
+        self.assertEqual(protocol.decode_body(b""), None)           # the bare acknowledgement
+        self.assertEqual(protocol.decode_body(b"not zlib"), None)
+
+    def test_decode_body_wraps_a_single_object(self):
+        _, body = protocol.split_replies(gcdh(1, {"a": 1}))[0][0]
+        self.assertEqual(protocol.decode_body(body), [{"a": 1}])
 
 
 if __name__ == "__main__":

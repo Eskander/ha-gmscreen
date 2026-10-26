@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import struct
+import zlib
 from dataclasses import dataclass
 from xml.sax.saxutils import escape
 
-from .const import BEACON_SIZE, DATA_JSON, MAGIC, REQ_HANDSHAKE, REQ_KEY, XOR_KEY
+from .const import BEACON_SIZE, DATA_JSON, MAGIC, XOR_KEY, REQ_HANDSHAKE, REQ_KEY
 
 
 class ProtocolError(Exception):
@@ -97,3 +99,48 @@ def key_request(code: int, data_type: int) -> bytes:
         )
     return frame(body.encode("utf-8"))
 
+
+def request_body(rid: int, data_type: int) -> bytes:
+    """A bare query request, e.g. {"request":"15"}."""
+    if data_type == DATA_JSON:
+        body = json.dumps({"request": str(rid)}, separators=(",", ":"))
+    else:
+        body = ("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>"
+                f'<Command request="{rid}"/>')
+    return frame(body.encode("utf-8"))
+
+
+REPLY_MAGIC = b"GCDH"
+
+
+def split_replies(buf: bytes) -> tuple[list[tuple[int, bytes]], bytes]:
+    """Split a receive buffer into (request_id, zlib_body) frames.
+
+    Frame: b"GCDH" + u32le body length + u32le request id + u32 0 + body.
+    Returns the complete frames and the unconsumed remainder.  Garbage before a
+    header is skipped.
+    """
+    frames: list[tuple[int, bytes]] = []
+    while len(buf) >= 16:
+        if buf[:4] != REPLY_MAGIC:
+            i = buf.find(REPLY_MAGIC, 1)
+            buf = buf[i:] if i > 0 else b""
+            continue
+        length, rid, _ = struct.unpack("<III", buf[4:16])
+        if len(buf) < 16 + length:
+            break
+        frames.append((rid, buf[16:16 + length]))
+        buf = buf[16 + length:]
+    return frames, buf
+
+
+def decode_body(body: bytes) -> list | None:
+    """zlib + JSON.  Returns None for empty frames (the box's bare acknowledgement)."""
+    if not body:
+        return None
+    try:
+        text = zlib.decompressobj().decompress(body)
+        data = json.loads(text)
+    except (zlib.error, ValueError):
+        return None
+    return data if isinstance(data, list) else [data]
