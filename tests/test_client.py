@@ -134,5 +134,53 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
             await c.close()
 
 
+STB_ON = [{"StbStatus": 1, "ProductName": "FUN_60", "SoftwareVersion": "3.87",
+           "SerialNumber": "210502018517", "ChannelNum": 1256}]
+
+
+class StatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_box_on(self):
+        replies = {15: gcdh(15, STB_ON), 19: gcdh(19, [{"Data": "0"}]),
+                   403: gcdh(403, [{"strength": 96, "quality": 90}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            st = await c.get_status()
+            await c.close()
+        self.assertIs(st.power, True)
+        self.assertIs(st.muted, False)
+        self.assertEqual((st.signal_strength, st.signal_quality), (96, 90))
+        self.assertEqual((st.channel_count, st.software_version, st.product, st.serial),
+                         (1256, "3.87", "FUN_60", "210502018517"))
+
+    async def test_standby_and_muted_skip_the_signal_query(self):
+        replies = {15: gcdh(15, [{"StbStatus": 0}]), 19: gcdh(19, [{"Data": "1"}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            st = await c.get_status()
+            await c.close()
+        self.assertIs(st.power, False)
+        self.assertIs(st.muted, True)
+        self.assertIsNone(st.signal_strength)
+        self.assertEqual(len(box.received), 2)      # 15 and 19 only, never 403
+
+    async def test_missing_fields_become_none(self):
+        replies = {15: gcdh(15, [{"Command": ""}]), 19: gcdh(19, [{"Command": ""}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            st = await c.get_status()
+            await c.close()
+        self.assertIsNone(st.power)
+        self.assertIsNone(st.muted)
+
+    async def test_unanswered_signal_query_does_not_fail_the_status(self):
+        replies = {15: gcdh(15, STB_ON), 19: gcdh(19, [{"Data": "0"}])}   # no 403 reply
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            st = await c.get_status(timeout=0.2)
+            await c.close()
+        self.assertIs(st.power, True)
+        self.assertIsNone(st.signal_strength)
+
+
 if __name__ == "__main__":
     unittest.main()

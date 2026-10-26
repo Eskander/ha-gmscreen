@@ -4,8 +4,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
+from dataclasses import dataclass, field
+from typing import Any
 
-from .const import BEACON_SIZE, DEFAULT_PORT, Key, keymap_for
+from .const import (BEACON_SIZE, DEFAULT_PORT, REQ_MUTE, REQ_SIGNAL, REQ_STB_INFO,
+                    Key, keymap_for)
 from .protocol import (BoxInfo, ProtocolError, decode_body, handshake_request, key_request,
                        parse_beacon, request_body, split_replies)
 
@@ -16,6 +19,30 @@ class GMScreenError(Exception):
 
 class BoxFullError(GMScreenError):
     """The box already has its maximum number of remote clients."""
+
+
+@dataclass
+class BoxStatus:
+    power: bool | None = None            # StbStatus: True on, False standby
+    muted: bool | None = None
+    signal_strength: int | None = None   # percent
+    signal_quality: int | None = None    # percent
+    channel_count: int | None = None
+    software_version: str | None = None
+    product: str | None = None
+    serial: str | None = None
+    raw: dict[int, Any] = field(default_factory=dict)
+
+
+def _first(reply: list | None) -> dict:
+    return reply[0] if reply and isinstance(reply[0], dict) else {}
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class GMScreenClient:
@@ -160,6 +187,33 @@ class GMScreenClient:
                 finally:
                     self._pending.pop(rid, None)
         raise GMScreenError(f"request {rid} failed")
+
+    async def get_status(self, timeout: float = 4.0) -> BoxStatus:
+        """Power and mute, plus signal readings while the box is on."""
+        st = BoxStatus()
+        info = _first(await self.request(REQ_STB_INFO, timeout))
+        st.raw[REQ_STB_INFO] = info
+        if "StbStatus" in info:
+            st.power = _int(info["StbStatus"]) == 1
+        st.channel_count = _int(info.get("ChannelNum"))
+        st.software_version = info.get("SoftwareVersion")
+        st.product = info.get("ProductName")
+        st.serial = info.get("SerialNumber")
+
+        mute = _first(await self.request(REQ_MUTE, timeout))
+        st.raw[REQ_MUTE] = mute
+        if "Data" in mute:
+            st.muted = _int(mute["Data"]) == 1
+
+        if st.power:
+            try:
+                sig = _first(await self.request(REQ_SIGNAL, timeout))
+                st.raw[REQ_SIGNAL] = sig
+                st.signal_strength = _int(sig.get("strength"))
+                st.signal_quality = _int(sig.get("quality"))
+            except GMScreenError:
+                pass        # optional reading; the core state above is still valid
+        return st
 
     async def __aenter__(self) -> "GMScreenClient":
         await self.connect()

@@ -12,6 +12,11 @@ XOR_KEY = 0x5B
 REQ_HANDSHAKE = 998
 REQ_KEY = 1040
 
+# Query requests this box answers (found by sweeping every id the app uses).
+REQ_STB_INFO = 15       # StbStatus (1 on, 0 standby), product, software, channel count
+REQ_MUTE = 19           # {"Data": "0"} volume on, {"Data": "1"} muted
+REQ_SIGNAL = 403        # {"strength": 96, "quality": 90}
+
 DATA_XML = 0
 DATA_JSON = 1
 
