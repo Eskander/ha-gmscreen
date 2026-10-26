@@ -12,9 +12,13 @@ XOR_KEY = 0x5B
 REQ_HANDSHAKE = 998
 REQ_KEY = 1040
 
-# Query requests this box answers (found by sweeping every id the app uses).
+# Query requests this box actually answers (found by sweeping every id the app uses).
 REQ_STB_INFO = 15       # StbStatus (1 on, 0 standby), product, software, channel count
 REQ_MUTE = 19           # {"Data": "0"} volume on, {"Data": "1"} muted
+REQ_SELECTED_SAT = 23   # {"Data": "84"}: SatIndex selected in the channels menu (see 22)
+ALL_SATELLITES = 120    # value of request 23 when "all satellites" is selected
+REQ_SAT_LIST = 22       # satellite list: SatName, SatIndex (0..85), SatAngle, SatDir
+REQ_TP_LIST = 24        # transponder list (~200 KB, slow)
 REQ_SIGNAL = 403        # {"strength": 96, "quality": 90}
 
 DATA_XML = 0

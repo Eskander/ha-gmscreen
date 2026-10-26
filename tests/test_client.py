@@ -141,11 +141,13 @@ STB_ON = [{"StbStatus": 1, "ProductName": "FUN_60", "SoftwareVersion": "3.87",
 class StatusTests(unittest.IsolatedAsyncioTestCase):
     async def test_box_on(self):
         replies = {15: gcdh(15, STB_ON), 19: gcdh(19, [{"Data": "0"}]),
-                   403: gcdh(403, [{"strength": 96, "quality": 90}])}
+                   403: gcdh(403, [{"strength": 96, "quality": 90}]),
+                   23: gcdh(23, [{"Data": "120"}])}
         async with FakeBox(replies=replies) as box:
             c = client.GMScreenClient("127.0.0.1", box.port)
             st = await c.get_status()
             await c.close()
+        self.assertEqual(st.satellite_index, const.ALL_SATELLITES)
         self.assertIs(st.power, True)
         self.assertIs(st.muted, False)
         self.assertEqual((st.signal_strength, st.signal_quality), (96, 90))
@@ -180,6 +182,39 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
             await c.close()
         self.assertIs(st.power, True)
         self.assertIsNone(st.signal_strength)
+
+
+SATELLITES = [{"SatName": "Hotbird ", "SatIndex": 1, "SatAngle": 130, "SatDir": 0},
+              {"SatName": "Nilesat", "SatIndex": 84, "SatAngle": 70, "SatDir": 1}]
+
+
+class SatelliteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selected_satellite_is_read_when_requested(self):
+        replies = {15: gcdh(15, STB_ON), 19: gcdh(19, [{"Data": "0"}]),
+                   23: gcdh(23, [{"Data": "84"}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            st = await c.get_status(signal=False)
+            await c.close()
+        self.assertEqual(st.satellite_index, 84)
+        self.assertIsNone(st.signal_strength)
+
+    async def test_optional_queries_are_not_sent_unless_asked_for(self):
+        replies = {15: gcdh(15, STB_ON), 19: gcdh(19, [{"Data": "0"}])}
+        async with FakeBox(replies=replies) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            await c.get_status(signal=False, satellite=False)
+            await c.close()
+        self.assertEqual(len(box.received), 2)
+
+    async def test_satellite_list_maps_index_to_trimmed_name(self):
+        async with FakeBox(replies={22: gcdh(22, SATELLITES)}) as box:
+            c = client.GMScreenClient("127.0.0.1", box.port)
+            self.assertEqual(await c.get_satellites(), {1: "Hotbird", 84: "Nilesat"})
+            await c.close()
+
+    def test_120_means_all_satellites(self):
+        self.assertEqual(const.ALL_SATELLITES, 120)
 
 
 if __name__ == "__main__":

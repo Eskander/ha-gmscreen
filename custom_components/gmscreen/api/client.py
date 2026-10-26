@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .const import (BEACON_SIZE, DEFAULT_PORT, REQ_MUTE, REQ_SIGNAL, REQ_STB_INFO,
-                    Key, keymap_for)
+                    REQ_SAT_LIST, REQ_SELECTED_SAT, Key, keymap_for)
 from .protocol import (BoxInfo, ProtocolError, decode_body, handshake_request, key_request,
                        parse_beacon, request_body, split_replies)
 
@@ -31,6 +31,7 @@ class BoxStatus:
     software_version: str | None = None
     product: str | None = None
     serial: str | None = None
+    satellite_index: int | None = None   # request 23: selected satellite (120 = all)
     raw: dict[int, Any] = field(default_factory=dict)
 
 
@@ -188,8 +189,18 @@ class GMScreenClient:
                     self._pending.pop(rid, None)
         raise GMScreenError(f"request {rid} failed")
 
-    async def get_status(self, timeout: float = 4.0) -> BoxStatus:
-        """Power and mute, plus signal readings while the box is on."""
+    async def get_satellites(self, timeout: float = 8.0) -> dict[int, str]:
+        """SatIndex -> name, from request 22."""
+        out: dict[int, str] = {}
+        for item in await self.request(REQ_SAT_LIST, timeout):
+            if isinstance(item, dict) and (idx := _int(item.get("SatIndex"))) is not None:
+                out[idx] = str(item.get("SatName", "")).strip()
+        return out
+
+    async def get_status(self, timeout: float = 4.0, *, signal: bool = True,
+                         satellite: bool = True) -> BoxStatus:
+        """Power and mute always; signal and selected satellite only when asked for
+        and only while the box is on."""
         st = BoxStatus()
         info = _first(await self.request(REQ_STB_INFO, timeout))
         st.raw[REQ_STB_INFO] = info
@@ -205,7 +216,7 @@ class GMScreenClient:
         if "Data" in mute:
             st.muted = _int(mute["Data"]) == 1
 
-        if st.power:
+        if st.power and signal:
             try:
                 sig = _first(await self.request(REQ_SIGNAL, timeout))
                 st.raw[REQ_SIGNAL] = sig
@@ -213,6 +224,13 @@ class GMScreenClient:
                 st.signal_quality = _int(sig.get("quality"))
             except GMScreenError:
                 pass        # optional reading; the core state above is still valid
+        if st.power and satellite:
+            try:
+                sat = _first(await self.request(REQ_SELECTED_SAT, timeout))
+                st.raw[REQ_SELECTED_SAT] = sat
+                st.satellite_index = _int(sat.get("Data"))
+            except GMScreenError:
+                pass
         return st
 
     async def __aenter__(self) -> "GMScreenClient":
