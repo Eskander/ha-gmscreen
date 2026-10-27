@@ -1,4 +1,4 @@
-"""Remote entity: send key presses to the box."""
+"""Remote entity: power state plus key presses."""
 from __future__ import annotations
 
 import asyncio
@@ -12,13 +12,10 @@ from homeassistant.components.remote import (
     RemoteEntity,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import GMScreenConfigEntry
-from .api import GMScreenError, Key
-from .const import DOMAIN
+from .entity import GMScreenEntity
 
 
 async def async_setup_entry(
@@ -27,28 +24,33 @@ async def async_setup_entry(
     async_add_entities([GMScreenRemote(entry)])
 
 
-class GMScreenRemote(RemoteEntity):
-    """The box reports no state yet, so this entity is always 'on' (it means: usable).
+class GMScreenRemote(GMScreenEntity, RemoteEntity):
+    """On means the box is running, off means standby.
 
-    Commands are key names (menu, ok, up, volume_up, 5, ...) or 'code:NN' for a raw
-    key code. Power is a toggle on these boxes: send the 'power' command.
+    Power is a toggle key on these boxes, so turn_on / turn_off only press it when the
+    reported state differs.  Commands are key names (menu, ok, up, volume_up, mute, 5,
+    ...) or 'code:NN' for a raw key code.
     """
 
-    _attr_has_entity_name = True
     _attr_name = None
-    _attr_should_poll = False
-    _attr_is_on = True
 
     def __init__(self, entry: GMScreenConfigEntry) -> None:
-        self._client = entry.runtime_data
-        ident = entry.unique_id or entry.entry_id
-        self._attr_unique_id = ident
-        info = self._client.info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, ident)},
-            name=entry.title,
-            model=info.model if info else None,
-        )
+        super().__init__(entry)
+        self._attr_unique_id = self._ident
+
+    @property
+    def is_on(self) -> bool | None:
+        return self.coordinator.data.power
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        if self.is_on is not True:
+            await self._press("power")
+            await self._refresh_soon()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        if self.is_on is not False:
+            await self._press("power")
+            await self._refresh_soon()
 
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
         repeats = kwargs.get(ATTR_NUM_REPEATS, 1)
@@ -57,19 +59,6 @@ class GMScreenRemote(RemoteEntity):
         for i, cmd in enumerate(commands):
             if i:
                 await asyncio.sleep(delay)
-            await self._send(cmd)
-
-    async def _send(self, cmd: str) -> None:
-        cmd = cmd.strip().lower()
-        try:
-            if cmd.startswith("code:"):
-                await self._client.send_code(int(cmd[5:]))
-            else:
-                await self._client.send_key(Key(cmd))
-        except ValueError as err:
-            raise ServiceValidationError(
-                f"Unknown command '{cmd}'. Use a key name such as menu, ok, up, volume_up, "
-                "or code:NN for a raw key code."
-            ) from err
-        except GMScreenError as err:
-            raise HomeAssistantError(f"Could not send '{cmd}': {err}") from err
+            await self._press(cmd)
+        if any(c.strip().lower() in ("power", "mute") for c in commands):
+            await self._refresh_soon()
