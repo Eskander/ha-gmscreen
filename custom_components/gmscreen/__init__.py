@@ -9,7 +9,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from .api import DEFAULT_PORT, GMScreenClient, GMScreenError
 from .const import CONF_CLIENT_UUID
 
-PLATFORMS: list[Platform] = []
+PLATFORMS = [Platform.REMOTE]
 
 type GMScreenConfigEntry = ConfigEntry[GMScreenClient]
 
