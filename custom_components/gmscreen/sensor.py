@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -15,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import GMScreenConfigEntry
-from .api import BoxStatus
+from .api import ALL_SATELLITES, BoxStatus
 from .entity import GMScreenEntity
 
 
@@ -46,7 +47,9 @@ SENSORS = (
 async def async_setup_entry(
     hass: HomeAssistant, entry: GMScreenConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities(GMScreenSensor(entry, d) for d in SENSORS)
+    entities: list[SensorEntity] = [GMScreenSensor(entry, d) for d in SENSORS]
+    entities.append(GMScreenSatelliteSensor(entry))
+    async_add_entities(entities)
 
 
 class _WantsMixin:
@@ -78,3 +81,30 @@ class GMScreenSensor(_WantsMixin, GMScreenEntity, SensorEntity):
     @property
     def native_value(self) -> int | str | None:
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class GMScreenSatelliteSensor(_WantsMixin, GMScreenEntity, SensorEntity):
+    """Satellite selected in the box's channels menu (request 23, named via request 22)."""
+
+    _attr_name = "Selected satellite"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:satellite-variant"
+    _wants = "satellite"
+
+    def __init__(self, entry: GMScreenConfigEntry) -> None:
+        super().__init__(entry)
+        self._attr_unique_id = f"{self._ident}_selected_satellite"
+
+    @property
+    def native_value(self) -> str | None:
+        idx = self.coordinator.data.satellite_index
+        if idx is None:
+            return None
+        if idx == ALL_SATELLITES:
+            return "All satellites"
+        return self.coordinator.satellites.get(idx, f"Satellite {idx}")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"satellite_index": self.coordinator.data.satellite_index}
