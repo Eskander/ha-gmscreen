@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "G-MScreen set-top box",
+        "description": "Enter the IP address of the box. If it was found on the network, it is pre-filled.",
+        "data": { "host": "Host" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the box. Check the IP address and that the box is fully started.",
+      "box_full": "The box says it cannot accept more remote clients. Power-cycle it and try again."
+    },
+    "abort": { "already_configured": "This box is already configured." }
+  }
+}
