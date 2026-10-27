@@ -12,7 +12,7 @@ from .api import DEFAULT_PORT, GMScreenClient, GMScreenError
 from .const import CONF_CLIENT_UUID
 from .coordinator import GMScreenCoordinator
 
-PLATFORMS = [Platform.REMOTE]
+PLATFORMS = [Platform.REMOTE, Platform.SWITCH]
 
 
 @dataclass
