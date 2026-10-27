@@ -1,7 +1,8 @@
-"""Polls the box for power and mute state."""
+"""Polls the box for power and mute, plus whatever extra readings entities asked for."""
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -25,9 +26,12 @@ class GMScreenCoordinator(DataUpdateCoordinator[BoxStatus]):
         super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN,
                          update_interval=timedelta(seconds=SCAN_INTERVAL_SECONDS))
         self.client = client
+        # Extra readings are only requested while an enabled entity wants them.
+        self.wanted: Counter[str] = Counter()
 
     async def _async_update_data(self) -> BoxStatus:
         try:
-            return await self.client.get_status(signal=False, satellite=False)
+            return await self.client.get_status(
+                signal=self.wanted["signal"] > 0, satellite=self.wanted["satellite"] > 0)
         except GMScreenError as err:
             raise UpdateFailed(f"Box not answering: {err}") from err
