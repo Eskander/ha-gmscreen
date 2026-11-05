@@ -1,10 +1,10 @@
 # G-MScreen Integration for Home Assistant
 
-Home Assistant integration for set-top boxes that are controlled by the G-MScreen Android app. It talks to the box directly over your local network, no cloud and no app needed.
+Home Assistant integration for set-top boxes that are controlled by the G-MScreen Android/iOS app. It talks to the box directly over your local network, no cloud and no app needed.
 
 Unofficial, and not affiliated with the app's publisher. Only tested on one box (model FUN_60, software 4.01), so other boxes and firmware versions may behave differently. Test the integration and report your findings.
 
-> This integration is basically my excuse for jumping on the AI-powered reverse engineering and clean room reimplementation bandwagon.
+> This integration is experimental. It's basically my excuse to jump on the AI-powered reverse engineering / clean room reimplementation bandwagon.
 
 ## Install
 
@@ -14,9 +14,9 @@ Or copy `custom_components/gmscreen` into your Home Assistant `config/custom_com
 
 ## Setup
 
-Go to Settings, Devices & services, Add integration, and pick G-MScreen Set-top Box. The box is found by its UDP beacon, or you can type its IP address. Make sure the box is on and on the same network as Home Assistant.
+Go to Settings > Devices & services > Add integration > and pick G-MScreen Set-top Box. The box is found by its UDP beacon, or you can type its IP address. Make sure the box is on and on the same network as Home Assistant.
 
-The box only accepts a limited number of paired clients. If setup says the box is full, make sure your phone is disconnected (or just reconnect later, it sometimes frees up on its own).
+The box only accepts a limited number of paired clients. If setup says the box is full, make sure your phone app is disconnected (or just reconnect later, it sometimes frees up on its own).
 
 ## Entities
 
@@ -31,12 +31,12 @@ The box is polled every 15 seconds.
 Send key names like `menu`, `ok`, `up`, `volume_up`, `mute`, `5`, or `code:NN` for a raw key code.
 
 ```yaml
-  action: remote.send_command
-  target:
-    entity_id: remote.fun_60
-  data:
-    command: [menu, down, down, ok]
-    delay_secs: 0.5
+action: remote.send_command
+target:
+  entity_id: remote.fun_60
+data:
+  command: [menu, down, down, ok]
+  delay_secs: 0.5
 ```
 
 ## Notes
