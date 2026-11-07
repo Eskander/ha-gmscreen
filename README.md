@@ -8,9 +8,9 @@ Unofficial, and not affiliated with the app's publisher. Only tested on one box 
 
 ## Install
 
-With HACS, add this repository as a custom repository, install it and restart Home Assistant.
+With Home Assistant Marketplace (formerly HACS), add this repository as a [custom repository](https://my.home-assistant.io/redirect/marketplace_repositories/) then [install it](https://my.home-assistant.io/redirect/marketplace_repository/?owner=Eskander&repository=ha-gmscreen).
 
-Or copy `custom_components/gmscreen` into your Home Assistant `config/custom_components` folder and restart.
+Or manually copy `custom_components/gmscreen` into your Home Assistant `config/custom_components` folder and restart.
 
 ## Setup
 
